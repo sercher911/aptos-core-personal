@@ -458,6 +458,7 @@ export class AptosClient {
           break;
         }
       } catch (e) {
+        // In short, this means we will retry if it was an ApiError and the code was 404 or 5xx.
         const isApiError = e instanceof Gen.ApiError;
         const isRequestError = isApiError && e.status !== 404 && e.status >= 400 && e.status < 500;
         if (!isApiError || isRequestError) {
@@ -607,40 +608,6 @@ export class AptosClient {
   }
 
   /**
-   * Publishes a move package. `packageMetadata` and `modules` can be generated with command
-   * `aptos move compile --save-metadata [ --included-artifacts=<...> ]`.
-   * @param sender
-   * @param packageMetadata package metadata bytes
-   * @param modules bytecodes of modules
-   * @param extraArgs
-   * @returns Transaction hash
-   */
-  async publishPackage(
-    sender: AptosAccount,
-    packageMetadata: BCS.Bytes,
-    modules: BCS.Seq<TxnBuilderTypes.Module>,
-    extraArgs?: {
-      maxGasAmount?: BCS.Uint64;
-      gasUnitPrice?: BCS.Uint64;
-      expireTimestamp?: BCS.Uint64;
-    },
-  ): Promise<string> {
-    const codeSerializer = new BCS.Serializer();
-    BCS.serializeVector(modules, codeSerializer);
-
-    const payload = new TxnBuilderTypes.TransactionPayloadEntryFunction(
-      TxnBuilderTypes.EntryFunction.natural(
-        "0x1::code",
-        "publish_package_txn",
-        [],
-        [BCS.bcsSerializeBytes(packageMetadata), codeSerializer.getBytes()],
-      ),
-    );
-
-    return this.generateSignSubmitTransaction(sender, payload, extraArgs);
-  }
-
-  /**
    * Helper for generating, submitting, and waiting for a transaction, and then
    * checking whether it was committed successfully. Under the hood this is just
    * `generateSignSubmitTransaction` and then `waitForTransactionWithResult`, see
@@ -707,6 +674,9 @@ function parseApiError(target: unknown, propertyKey: string, descriptor: Propert
   // eslint-disable-next-line no-param-reassign
   descriptor.value = async function wrapper(...args: any[]) {
     try {
+      // We need to explicitly await here so that the function is called and
+      // potentially throws an error. If we just return without awaiting, the
+      // promise is returned directly and the catch block cannot trigger.
       const res = await childFunction.apply(this, [...args]);
       return res;
     } catch (e) {
