@@ -17,9 +17,9 @@ module vault::core_tests {
     }
 
     #[test]
-    public entry fun only_signer_can_pause_unpause() {
-        let admin = get_account();
-        let addr = signer::address_of(&admin);
+    public entry fun signer_can_pause_unpause() {
+        let admin = &get_account();
+        let addr = signer::address_of(admin);
         aptos_framework::account::create_account_for_test(addr);
 
         core::init(admin);
@@ -28,23 +28,29 @@ module vault::core_tests {
         debug::print(&core::check_pause_status(addr));
         assert!(core::check_pause_status(addr) == true, 0);
 
-        core::unpause(addr);
+        core::unpause(admin);
         debug::print(&core::check_pause_status(addr));
         assert!(core::check_pause_status(addr) == false, 0);
 
-        core::pause(addr);
+        core::pause(admin);
         debug::print(&core::check_pause_status(addr));
         assert!(core::check_pause_status(addr) == true, 0);
+    }
 
+    #[test]
+    #[expected_failure]
+    public entry fun users_cannot_pause_unpause() {
+        let admin = &get_account();
+        let addr = signer::address_of(admin);
+        aptos_framework::account::create_account_for_test(addr);
 
-        let user = get_user_account();
-        let user_addr = signer::address_of(&user);
+        core::init(admin);
+
+        let user = &get_user_account();
+        let user_addr = signer::address_of(user);
         aptos_framework::account::create_account_for_test(user_addr);
 
-        debug::print(&addr);
-        debug::print(&user_addr);
         // attemp to unpause, should fail
-        core::unpause(user_addr);
-        assert!(core::check_pause_status(user_addr) == true, 0);
+        core::unpause(user);
     }
 }

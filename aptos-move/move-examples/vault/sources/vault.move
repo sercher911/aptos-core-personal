@@ -1,9 +1,13 @@
 module vault::core {
     use std::error;
-    // use std::signer;
+    // use std::vector;
+    use std::signer;
     // use std::string;
     // use aptos_framework::account;
-    // use aptos_std::event;
+    use aptos_std::table;
+    // use aptos_framework::coin::{Self, Coin};
+    // friend aptos_framework::aptos_coin;
+    // friend aptos_framework::genesis;
 
 // //:!:>resource
 //     struct MessageHolder has key {
@@ -17,12 +21,25 @@ module vault::core {
 //         to_message: string::String,
 //     }
 
-//:!:>resource
+// drop, store, copy, key
+    struct PauseCap has key {
+        
+    }
+
     struct PauseOrNot has key {
         paused: bool
     }
 
-    const EACCOUNT_NOT_FOUND: u64 = 0;
+    // coinType address stored here with amount recorded
+    struct Shares has store {
+        coins: table::Table<address, u64>
+    }
+
+    struct VaultMap has key {
+        shares: table::Table<address, Shares>
+    }
+
+    const NO_CAP: u64 = 0;
     const NOT_INITIALIZED: u64 = 1;
     const EINSUFFICIENT_BALANCE: u64 = 2;
 
@@ -32,27 +49,50 @@ module vault::core {
     // allow users to deposit a token, track user address and token value
     // allows users to withdraw a token, track user address bal
 
-    public entry fun pause(addr: address) acquires PauseOrNot {
-        assert!(exists<PauseOrNot>(addr), error::not_found(NOT_INITIALIZED));
+    public entry fun pause(account: &signer) acquires PauseOrNot {
+        let addr = signer::address_of(account);
+        assert!(exists<PauseCap>(addr), error::not_found(NO_CAP));
         borrow_global_mut<PauseOrNot>(addr).paused = true
     }
 
-    public entry fun unpause(addr: address) acquires PauseOrNot {
-        assert!(exists<PauseOrNot>(addr), error::not_found(NOT_INITIALIZED));
+    public entry fun unpause(account: &signer) acquires PauseOrNot {
+        let addr = signer::address_of(account);
+        assert!(exists<PauseCap>(addr), error::not_found(NO_CAP));
         borrow_global_mut<PauseOrNot>(addr).paused = false
     }
+    
     public entry fun check_pause_status(addr: address): bool acquires PauseOrNot {
-        assert!(exists<PauseOrNot>(addr), error::not_found(NOT_INITIALIZED));
         *&borrow_global<PauseOrNot>(addr).paused
     }
 
-    public entry fun init(account: signer) {
-        // let admin_addr = signer::address_of(&account);
+    public entry fun init(account: &signer) {
+        // let shareMap = table::new<address, Shares>();
         
-        move_to(&account, PauseOrNot {
-            paused: true,
+        // let (resource_signer, resource_signer_cap) = account::create_resource_account(&account, seed);
+
+        move_to(account, PauseCap{});
+        move_to(account, PauseOrNot {
+            paused: true
         })
+
+        // move_to(&account, VaultMap {
+        //     shares: shareMap
+        // });
     }
+
+    // public fun get_vault_map<T>(addr: address, coin: Coin<T>) {
+    //     *&borrow_global<VaultMap>(addr).paused
+    // }
+
+    // public fun deposit<T>(from: &signer, coin: Coin<T>) {
+    //     let coin = coin::withdraw(from, amount);
+    //     coin::deposit(to, coin);
+    // }
+
+    // public fun withdraw<T>(to: &signer, amount: u64) {
+    //     let coin = coin::withdraw(from, amount);
+    //     coin::deposit(to, coin);
+    // }
 
     // public entry fun set_message(account: signer, message: string::String)
     // acquires MessageHolder {
