@@ -17,6 +17,27 @@ module vault::core_tests {
     }
 
     #[test]
+    public entry fun user_can_add_vault_coin() {
+        let admin = &get_account();
+        let addr = signer::address_of(admin);
+        aptos_framework::account::create_account_for_test(addr);
+
+        core::init(admin);
+
+        let user = &get_user_account();
+        let user_addr = signer::address_of(user);
+        aptos_framework::account::create_account_for_test(user_addr);
+
+        let coin_addr = signer::address_of(&get_account());
+
+        core::add_vault_coin(addr, user, coin_addr, 1);
+        assert!(core::get_vault_coin_amount(addr, user_addr, coin_addr) == 1, 0);
+
+        core::add_vault_coin(addr, user, coin_addr, 2);
+        assert!(core::get_vault_coin_amount(addr, user_addr, coin_addr) == 3, 0);
+    }
+
+    #[test]
     public entry fun signer_can_pause_unpause() {
         let admin = &get_account();
         let addr = signer::address_of(admin);

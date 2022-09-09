@@ -21,10 +21,7 @@ module vault::core {
 //         to_message: string::String,
 //     }
 
-// drop, store, copy, key
-    struct PauseCap has key {
-        
-    }
+    struct PauseCap has key {}
 
     struct PauseOrNot has key {
         paused: bool
@@ -40,11 +37,9 @@ module vault::core {
     }
 
     const NO_CAP: u64 = 0;
-    const NOT_INITIALIZED: u64 = 1;
-    const EINSUFFICIENT_BALANCE: u64 = 2;
+    const NO_VAULT_INITIALIZED: u64 = 1;
+    const NO_COIN_FOUND: u64 = 2;
 
-    // pause
-    // unpause
     // initialize vault creation sys with admin only rights
     // allow users to deposit a token, track user address and token value
     // allows users to withdraw a token, track user address bal
@@ -66,23 +61,41 @@ module vault::core {
     }
 
     public entry fun init(account: &signer) {
-        // let shareMap = table::new<address, Shares>();
-        
-        // let (resource_signer, resource_signer_cap) = account::create_resource_account(&account, seed);
-
         move_to(account, PauseCap{});
         move_to(account, PauseOrNot {
             paused: true
-        })
+        });
 
-        // move_to(&account, VaultMap {
-        //     shares: shareMap
-        // });
+        move_to(account, VaultMap {
+            shares: table::new<address, Shares>()
+        });
     }
 
-    // public fun get_vault_map<T>(addr: address, coin: Coin<T>) {
-    //     *&borrow_global<VaultMap>(addr).paused
-    // }
+    public entry fun get_vault_coin_amount(vault_addr: address, owner_addr: address, coin_addr: address): u64 acquires VaultMap {
+        let VaultMap { shares } = borrow_global<VaultMap>(vault_addr);
+        assert!(table::contains(shares, owner_addr), NO_VAULT_INITIALIZED);
+        let coins = &table::borrow(shares, owner_addr).coins;
+        assert!(table::contains(coins, coin_addr), NO_COIN_FOUND);
+        *table::borrow(coins, coin_addr)
+    }
+
+    public entry fun add_vault_coin(vault_addr: address, account: &signer, coin_addr: address, amount: u64) acquires VaultMap {
+        let owner_addr = signer::address_of(account);
+        // let VaultMap { shares } = borrow_global_mut<VaultMap>(vault_addr);
+        let vault_map = borrow_global_mut<VaultMap>(vault_addr);
+        // check if user is already there, if not add user
+        if (!table::contains(&vault_map.shares, owner_addr)) {
+            table::add(&mut vault_map.shares, owner_addr, Shares { coins: table::new<address, u64>() } );
+        };
+
+        let coins_map = table::borrow_mut(&mut vault_map.shares, owner_addr);
+        if (!table::contains(&coins_map.coins, coin_addr)) {
+            table::add(&mut coins_map.coins, coin_addr, amount);
+        } else {
+            let curr_amount = table::borrow_mut(&mut coins_map.coins, coin_addr);
+            *curr_amount = *curr_amount + amount;
+        };
+    }
 
     // public fun deposit<T>(from: &signer, coin: Coin<T>) {
     //     let coin = coin::withdraw(from, amount);
