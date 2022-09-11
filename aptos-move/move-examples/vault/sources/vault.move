@@ -1,25 +1,14 @@
 module vault::core {
     use std::error;
-    // use std::vector;
     use std::signer;
-    // use std::string;
-    // use aptos_framework::account;
     use aptos_std::table;
-    // use aptos_framework::coin::{Self, Coin};
-    // friend aptos_framework::aptos_coin;
-    // friend aptos_framework::genesis;
+    use aptos_framework::coin;
+    use aptos_std::type_info;
 
-// //:!:>resource
-//     struct MessageHolder has key {
-//         message: string::String,
-//         message_change_events: event::EventHandle<MessageChangeEvent>,
-//     }
-// //<:!:resource
-    
-//     struct MessageChangeEvent has drop, store {
-//         from_message: string::String,
-//         to_message: string::String,
-//     }
+    struct Coin<phantom CoinType> has store {
+        /// Amount of coin this address has.
+        value: u64,
+    }
 
     struct PauseCap has key {}
 
@@ -33,16 +22,13 @@ module vault::core {
     }
 
     struct VaultMap has key {
-        shares: table::Table<address, Shares>
+        shares: table::Table<address, Shares>,
     }
 
     const NO_CAP: u64 = 0;
     const NO_VAULT_INITIALIZED: u64 = 1;
     const NO_COIN_FOUND: u64 = 2;
-
-    // initialize vault creation sys with admin only rights
-    // allow users to deposit a token, track user address and token value
-    // allows users to withdraw a token, track user address bal
+    const COIN_NOT_REGISTERED: u64 = 3;
 
     public entry fun pause(account: &signer) acquires PauseOrNot {
         let addr = signer::address_of(account);
@@ -67,40 +53,56 @@ module vault::core {
         });
 
         move_to(account, VaultMap {
-            shares: table::new<address, Shares>()
+            shares: table::new<address, Shares>(),
+            // balances: vector::empty<Coin<CoinType>>()
         });
     }
 
-    public entry fun get_vault_coin_amount(vault_addr: address, owner_addr: address, coin_addr: address): u64 acquires VaultMap {
+    public entry fun check_balance<CoinType>(vault_addr: address, owner_addr: address): u64 acquires VaultMap {
         let VaultMap { shares } = borrow_global<VaultMap>(vault_addr);
         assert!(table::contains(shares, owner_addr), NO_VAULT_INITIALIZED);
         let coins = &table::borrow(shares, owner_addr).coins;
+        let coin_addr = coin_address<CoinType>();
         assert!(table::contains(coins, coin_addr), NO_COIN_FOUND);
         *table::borrow(coins, coin_addr)
     }
 
-    public entry fun add_vault_coin(vault_addr: address, account: &signer, coin_addr: address, amount: u64) acquires VaultMap {
+    public entry fun register_coin<CoinType>(account: &signer) {
+        let addr = signer::address_of(account);
+        assert!(exists<PauseCap>(addr), error::not_found(NO_CAP));
+        coin::register<CoinType>(account);
+    }
+
+    public entry fun deposit<CoinType>(vault_addr: address, account: &signer, value: u64) acquires VaultMap {
+        // coin is not registered!
+        // assert!(!coin::is_account_registered<CoinType>(vault_addr), COIN_NOT_REGISTERED);
+
         let owner_addr = signer::address_of(account);
-        // let VaultMap { shares } = borrow_global_mut<VaultMap>(vault_addr);
         let vault_map = borrow_global_mut<VaultMap>(vault_addr);
-        // check if user is already there, if not add user
+        // check if user exists in vault map, if not add user
         if (!table::contains(&vault_map.shares, owner_addr)) {
             table::add(&mut vault_map.shares, owner_addr, Shares { coins: table::new<address, u64>() } );
         };
 
+        coin::transfer<CoinType>(account, vault_addr, value);
+
+        // Record after transfer is complete to avoid drainage scenarios
+        let coin_addr = coin_address<CoinType>();
+
         let coins_map = table::borrow_mut(&mut vault_map.shares, owner_addr);
         if (!table::contains(&coins_map.coins, coin_addr)) {
-            table::add(&mut coins_map.coins, coin_addr, amount);
+            table::add(&mut coins_map.coins, coin_addr, value);
         } else {
             let curr_amount = table::borrow_mut(&mut coins_map.coins, coin_addr);
-            *curr_amount = *curr_amount + amount;
+            *curr_amount = *curr_amount + value;
         };
     }
 
-    // public fun deposit<T>(from: &signer, coin: Coin<T>) {
-    //     let coin = coin::withdraw(from, amount);
-    //     coin::deposit(to, coin);
-    // }
+    // /// A helper function that returns the address of CoinType.
+    public fun coin_address<CoinType>(): address {
+        let type_info = type_info::type_of<CoinType>();
+        type_info::account_address(&type_info)
+    }
 
     // public fun withdraw<T>(to: &signer, amount: u64) {
     //     let coin = coin::withdraw(from, amount);
