@@ -3,12 +3,9 @@ module vault::core_tests {
     use std::signer;
     use std::unit_test;
     use std::vector;
-    use std::debug;
-    // use aptos_framework::aggregator_factory;
     use std::string;
     use aptos_framework::coin;
     use aptos_std::type_info;
-    // use aptos_framework::genesis;
 
     use vault::core;
     struct WUSDT has copy, drop, store {}
@@ -71,27 +68,6 @@ module vault::core_tests {
         });
     }
 
-    // #[test]
-    // public entry fun user_cannot_deposit_unapproved_coin() {
-    //     let admin = &get_account();
-    //     let addr = signer::address_of(admin);
-    //     aptos_framework::account::create_account_for_test(addr);
-
-    //     core::init(admin);
-
-    //     let user = &get_user_account();
-    //     let user_addr = signer::address_of(user);
-    //     aptos_framework::account::create_account_for_test(user_addr);
-
-    //     let coin_addr = signer::address_of(&get_account());
-
-    //     core::deposit(addr, user, coin_addr, 1);
-    //     assert!(core::get_vault_coin_amount(addr, user_addr, coin_addr) == 1, 0);
-
-    //     core::add_vault_coin(addr, user, coin_addr, 2);
-    //     assert!(core::get_vault_coin_amount(addr, user_addr, coin_addr) == 3, 0);
-    // }
-
     #[test(admin_addr=@vault)]
     public entry fun user_can_deposit(admin_addr: signer) {
         let admin = &admin_addr;
@@ -107,6 +83,9 @@ module vault::core_tests {
         create_fake_money<WUSDT>(admin, user, 2);
         create_fake_money<WETH>(admin, user, 4);
 
+        core::register_coin<WUSDT>(admin);
+        core::register_coin<WETH>(admin);
+
         // check coin balance is created
         assert!(coin::balance<WUSDT>(user_addr) == 2, 0);
         assert!(coin::balance<WETH>(user_addr) == 4, 0);
@@ -114,26 +93,24 @@ module vault::core_tests {
         core::deposit<WUSDT>(addr, user, 1);
         core::deposit<WETH>(addr, user, 2);
 
-        // check coin has been withdraw
+        // check coin has been withdraw from user
         assert!(coin::balance<WUSDT>(user_addr) == 1, 0);
         assert!(coin::balance<WETH>(user_addr) == 2, 0);
 
-        // check coin has been deposited
-        assert!(coin::balance<WUSDT>(addr) == 1, 0);
-        assert!(coin::balance<WETH>(addr) == 2, 0);
-
-        // debug::print(&core::check_balance<WUSDT>(addr, user_addr));
-        debug::print(&core::coin_address<WUSDT>());
-        debug::print(&core::coin_address<WETH>());
-        // check deposit is recorded correctly
+        // check recorded vault balance is correct
         assert!(core::check_balance<WUSDT>(addr, user_addr) == 1, 0);
         assert!(core::check_balance<WETH>(addr, user_addr) == 2, 0);
 
-        // core::deposit(addr, user, coin_addr, 1);
-        // assert!(core::get_vault_coin_amount(addr, user_addr, coin_addr) == 1, 0);
+        core::withdraw<WUSDT>(addr, user, 1);
+        core::withdraw<WETH>(addr, user, 1);
 
-        // core::add_vault_coin(addr, user, coin_addr, 2);
-        // assert!(core::get_vault_coin_amount(addr, user_addr, coin_addr) == 3, 0);
+        // check coin has been deposited to user
+        assert!(coin::balance<WUSDT>(user_addr) == 2, 0);
+        assert!(coin::balance<WETH>(user_addr) == 3, 0);
+
+        // check recorded vault balance is correct
+        assert!(core::check_balance<WUSDT>(addr, user_addr) == 0, 0);
+        assert!(core::check_balance<WETH>(addr, user_addr) == 1, 0);
     }
 
     #[test]
@@ -145,15 +122,12 @@ module vault::core_tests {
         core::init(admin);
 
         // check it is paused first
-        debug::print(&core::check_pause_status(addr));
         assert!(core::check_pause_status(addr) == true, 0);
 
         core::unpause(admin);
-        debug::print(&core::check_pause_status(addr));
         assert!(core::check_pause_status(addr) == false, 0);
 
         core::pause(admin);
-        debug::print(&core::check_pause_status(addr));
         assert!(core::check_pause_status(addr) == true, 0);
     }
 
